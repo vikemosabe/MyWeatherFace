@@ -36,7 +36,6 @@
                 "file": "fonts/Roboto-Condensed.ttf"
             },
             {
-                "characterRegex": "[:0-9]",
                 "type": "font",
                 "name": "FONT_ROBOTO_BOLD_SUBSET_41",
                 "file": "fonts/Roboto-Bold.ttf"
@@ -53,7 +52,6 @@
                 "file": "fonts/futura.ttf"
             },
             {
-                "characterRegex": "[0-9:-]",
                 "type": "font",
                 "name": "FONT_FUTURA_TEMP_18",
                 "file": "fonts/futura.ttf"
