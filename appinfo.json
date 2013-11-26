@@ -1,0 +1,144 @@
+{
+    "versionLabel": "1.0",
+    "uuid": "14f8aa06-5cd6-4df4-9b90-3fc43d683fe1",
+    "appKeys": {},
+    "longName": "MyWeatherFace",
+    "versionCode": 1,
+    "capabilities": [
+        "location"
+    ],
+    "shortName": "MyWeatherFace",
+    "companyName": "vikemosabe",
+    "watchapp": {
+        "watchface": true
+    },
+    "resources": {
+        "media": [
+            {
+                "type": "png",
+                "name": "BG_IMAGE",
+                "file": "images/BG.png"
+            },
+            {
+                "menuIcon": true,
+                "type": "png",
+                "name": "IMAGE_MENU_ICON",
+                "file": "images/menuicon.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_FOG",
+                "file": "images/fog.png"
+            },
+            {
+                "type": "font",
+                "name": "FONT_ROBOTO_CONDENSED_20",
+                "file": "fonts/Roboto-Condensed.ttf"
+            },
+            {
+                "characterRegex": "[:0-9]",
+                "type": "font",
+                "name": "FONT_ROBOTO_BOLD_SUBSET_41",
+                "file": "fonts/Roboto-Bold.ttf"
+            },
+            {
+                "trackingAdjust": 1,
+                "type": "font",
+                "name": "FONT_FUTURA_TIMES_14",
+                "file": "fonts/futura.ttf"
+            },
+            {
+                "type": "font",
+                "name": "FONT_FUTURA_CONDITIONS_12",
+                "file": "fonts/futura.ttf"
+            },
+            {
+                "characterRegex": "[0-9:-]",
+                "type": "font",
+                "name": "FONT_FUTURA_TEMP_18",
+                "file": "fonts/futura.ttf"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_UNKNOWN",
+                "file": "images/unknown.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_SUNNY",
+                "file": "images/sunny.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_SNOW",
+                "file": "images/snow.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_RAIN",
+                "file": "images/rain.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_PARTLYCLOUDY",
+                "file": "images/partlycloudy.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_NT_SUNNY",
+                "file": "images/nt_sunny.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_NT_PARTLYCLOUDY",
+                "file": "images/nt_partlycloudy.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_NT_CHANCESNOW",
+                "file": "images/nt_chancesnow.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_NT_CHANCEFLURRIES",
+                "file": "images/nt_chanceflurries.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_FLURRIES",
+                "file": "images/flurries.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "PIC_FAHR",
+                "file": "images/Fahr.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_CLOUDY",
+                "file": "images/cloudy.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_CHANCETSTORMS",
+                "file": "images/chancetstorms.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_CHANCESNOW",
+                "file": "images/chancesnow.png"
+            },
+            {
+                "type": "png-trans",
+                "name": "ICON_CHANCEFLURRIES",
+                "file": "images/chanceflurries.png"
+            },
+            {
+                "characterRegex": "[a-z01]",
+                "type": "font",
+                "name": "FONT_MOON_PHASES_SUBSET_24",
+                "file": "fonts/moon_phases.ttf"
+            }
+        ]
+    }
+}
