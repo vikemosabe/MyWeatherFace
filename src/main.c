@@ -18,10 +18,10 @@ enum WeatherKey {
 };
  
 static Window *window;
-static GBitmap     *background_image;
-static GBitmap     *battery_image;
-static GBitmap     *bluetooth_image;
-static GBitmap     *icon_image;
+static GBitmap     *background_image = NULL;
+static GBitmap     *battery_image = NULL;
+static GBitmap     *bluetooth_image = NULL;
+static GBitmap     *icon_image = NULL;
 static BitmapLayer *background_layer;
 static BitmapLayer *battery_layer;
 static BitmapLayer *bluetooth_layer;
@@ -64,6 +64,7 @@ GRect MOON_RECT    = ConstantGRect(0, 142, 144, 168-142);
 GRect ERR_RECT    = ConstantGRect(0, 35, 144, 26);
 GRect BATT_RECT  = ConstantGRect( 123,  94,  17,   9 );
 GRect BT_RECT    = ConstantGRect(   4,  94,  17,   9 );
+GRect ICON_RECT    = ConstantGRect(35, 0, 70, 70);
 
 // Define placeholders for time and date
 static char time_text[] = "00:00";
@@ -74,6 +75,23 @@ static char day_text[] = "Xxxxxxxxx";
 
 // Work around to handle initial display for minutes to work when testing units_changed
 static bool first_cycle = true;
+static const uint32_t WEATHER_ICONS[] = {
+        RESOURCE_ID_ICON_CHANCEFLURRIES_BLACK,//0
+        RESOURCE_ID_ICON_CHANCESNOW_BLACK,//1
+        RESOURCE_ID_ICON_CHANCETSTORMS_BLACK,//2
+        RESOURCE_ID_ICON_CLOUDY_BLACK,//3
+        RESOURCE_ID_ICON_FLURRIES_BLACK,//4
+        RESOURCE_ID_ICON_NT_CHANCEFLURRIES_BLACK,//5
+        RESOURCE_ID_ICON_NT_CHANCESNOW_BLACK,//6
+        RESOURCE_ID_ICON_NT_PARTLYCLOUDY_BLACK,//7
+        RESOURCE_ID_ICON_NT_SUNNY_BLACK,//8
+        RESOURCE_ID_ICON_PARTLYCLOUDY_BLACK,//9
+        RESOURCE_ID_ICON_RAIN_BLACK,//10
+        RESOURCE_ID_ICON_SNOW_BLACK,//11
+        RESOURCE_ID_ICON_SUNNY_BLACK,//12
+        RESOURCE_ID_ICON_UNKNOWN_BLACK,//13
+        RESOURCE_ID_ICON_FOG_BLACK//14
+};
 
 /*
   Setup new TextLayer
@@ -86,6 +104,22 @@ static TextLayer * setup_text_layer( GRect rect, GTextAlignment align , GFont fo
   text_layer_set_font( newLayer, font );
 
   return newLayer;
+}
+static long myAtol(const char *s) {
+    const char *p = s, *q;
+    long n = 0;
+    int sign = 1, k = 1;
+    //DEBUG("myAtol '%s'", s)
+    if (p != NULL) {
+        if (*p != '\0') {
+            if ((*p == '+') || (*p == '-')) {
+                if (*p++ == '-') sign = -1;
+            }
+            for (q = p; (*p != '\0'); p++);
+            for (--p; p >= q; --p, k *= 10) n += (*p - '0') * k;
+        }
+    }
+    return n * sign;
 }
 /*Convert decimal hours, into hours and minutes with rounding*/
 int hours(float time)
@@ -234,31 +268,31 @@ void sync_tuple_changed_callback(const uint32_t key,
       if (icon_image) {
         gbitmap_destroy(icon_image);
       }
-      text_layer_set_text(error_layer, new_tuple->value->cstring);
-      layer_mark_dirty(text_layer_get_layer(error_layer));
-      //icon_image = gbitmap_create_with_resource(
-      //    WEATHER_ICONS[new_tuple->value->uint8]);
-      //bitmap_layer_set_bitmap(icon_layer, icon_image);
+      //text_layer_set_text(error_layer, new_tuple->value->cstring);
+      //layer_mark_dirty(text_layer_get_layer(error_layer));
+      icon_image = gbitmap_create_with_resource(WEATHER_ICONS[myAtol(new_tuple->value->cstring)]);
+      bitmap_layer_set_bitmap(icon_layer, icon_image);
+      //layer_mark_dirty(bitmap_layer_get_layer(icon_layer));
       break;
 
     case TEMP_KEY:
       text_layer_set_text(temp_layer, new_tuple->value->cstring);
-      layer_mark_dirty(text_layer_get_layer(bar_layer));
+      //layer_mark_dirty(text_layer_get_layer(bar_layer));
       break;
 
     case BAR_KEY:
       text_layer_set_text(bar_layer, new_tuple->value->cstring);
-      layer_mark_dirty(text_layer_get_layer(bar_layer));
+      //layer_mark_dirty(text_layer_get_layer(bar_layer));
       break;
 
     case TIME_KEY:
       text_layer_set_text(updated_layer, new_tuple->value->cstring);
-      layer_mark_dirty(text_layer_get_layer(updated_layer));
+      //layer_mark_dirty(text_layer_get_layer(updated_layer));
       break;
 
     case COND_KEY:
       text_layer_set_text(conditions_layer, new_tuple->value->cstring);
-      layer_mark_dirty(text_layer_get_layer(conditions_layer));
+      //layer_mark_dirty(text_layer_get_layer(conditions_layer));
       break;
   }
 }
@@ -360,6 +394,53 @@ void handle_tick( struct tm *tick_time, TimeUnits units_changed ) {
   }
 }
 
+/*
+  Destroy GBitmap and BitmapLayer
+*/
+void destroy_graphics( GBitmap *image, BitmapLayer *layer ) {
+  layer_remove_from_parent( bitmap_layer_get_layer( layer ) );
+  bitmap_layer_destroy( layer );
+  if ( image != NULL ) {
+    gbitmap_destroy( image );
+  }
+}
+
+static void window_unload(Window *window) {
+  // Unsubscribe from services
+  tick_timer_service_unsubscribe();
+  app_sync_deinit(&sync);
+  //battery_state_service_unsubscribe();
+
+  // Destroy image objects
+  destroy_graphics( background_image, background_layer );
+  destroy_graphics( battery_image, battery_layer );
+  destroy_graphics( bluetooth_image, bluetooth_layer );
+  destroy_graphics( icon_image, icon_layer );
+
+  // Destroy tex tobjects
+  text_layer_destroy( temp_layer );
+  text_layer_destroy( bar_layer );
+  text_layer_destroy( sunrise_layer );
+  text_layer_destroy( sunset_layer );
+  text_layer_destroy( error_layer );
+  text_layer_destroy( updated_layer );
+  text_layer_destroy( conditions_layer );
+  text_layer_destroy( day_layer );
+  text_layer_destroy( date_layer );
+  text_layer_destroy( time_layer );
+  text_layer_destroy( secs_layer );
+  text_layer_destroy( ampm_layer );
+  text_layer_destroy( moonPercent_layer );
+  
+  // Destroy font objects
+  fonts_unload_custom_font( font_date );
+  fonts_unload_custom_font( font_time );
+  fonts_unload_custom_font( font_temp );
+  fonts_unload_custom_font( font_cond );
+  fonts_unload_custom_font( font_times );
+  fonts_unload_custom_font( font_moon );
+
+}
 
 /*
   Initialization
@@ -367,6 +448,9 @@ void handle_tick( struct tm *tick_time, TimeUnits units_changed ) {
 void handle_init( void ) {
   window = window_create();
   window_stack_push( window, true );
+  window_set_window_handlers(window, (WindowHandlers) {
+    .unload = window_unload
+  });
   Layer *window_layer = window_get_root_layer( window );
 
   // Background image
@@ -393,7 +477,7 @@ void handle_init( void ) {
   layer_add_child( window_layer, text_layer_get_layer( ampm_layer ) );
 
   // Setup temp layer
-  temp_layer = setup_text_layer( TEMP_RECT, GTextAlignmentCenter, font_temp );
+  temp_layer = setup_text_layer( TEMP_RECT, GTextAlignmentLeft, font_temp );
   layer_add_child( window_layer, text_layer_get_layer( temp_layer ) );
 
   // Setup conditions layer
@@ -433,8 +517,12 @@ void handle_init( void ) {
   layer_add_child( window_layer, text_layer_get_layer( moonPercent_layer ) );
 
   // Setup error layer
-  error_layer = setup_text_layer( ERR_RECT, GTextAlignmentCenter, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD) );
+  error_layer = setup_text_layer( ERR_RECT, GTextAlignmentLeft, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD) );
   layer_add_child( window_layer, text_layer_get_layer( error_layer ) );
+
+  // Setup icon layer
+  icon_layer = bitmap_layer_create(ICON_RECT);
+  layer_add_child(window_layer, bitmap_layer_get_layer(icon_layer));
 
   // Force update for battery and bluetooth status
   //handle_battery( battery_state_service_peek() );
@@ -450,7 +538,7 @@ void handle_init( void ) {
 
   Tuplet initial_values[] = {
     TupletCString(TEMP_KEY, "0"),
-    TupletCString(IMAGE_KEY, "13"),
+    TupletInteger(IMAGE_KEY, (uint8_t) 13),
     TupletCString(BAR_KEY, "0"),
     TupletCString(TIME_KEY, "00:00"),
     TupletCString(COND_KEY, "?")
@@ -469,54 +557,9 @@ void handle_init( void ) {
 }
 
 /*
-  Destroy GBitmap and BitmapLayer
-*/
-void destroy_graphics( GBitmap *image, BitmapLayer *layer ) {
-  layer_remove_from_parent( bitmap_layer_get_layer( layer ) );
-  bitmap_layer_destroy( layer );
-  if ( image != NULL ) {
-    gbitmap_destroy( image );
-  }
-}
-
-
-/*
   dealloc
 */
 void handle_deinit( void ) {
-  // Unsubscribe from services
-  tick_timer_service_unsubscribe();
-  //battery_state_service_unsubscribe();
-
-  // Destroy image objects
-  destroy_graphics( background_image, background_layer );
-  destroy_graphics( battery_image, battery_layer );
-  destroy_graphics( bluetooth_image, bluetooth_layer );
-  destroy_graphics( icon_image, icon_layer );
-
-  // Destroy tex tobjects
-  text_layer_destroy( temp_layer );
-  text_layer_destroy( bar_layer );
-  text_layer_destroy( sunrise_layer );
-  text_layer_destroy( sunset_layer );
-  text_layer_destroy( error_layer );
-  text_layer_destroy( updated_layer );
-  text_layer_destroy( conditions_layer );
-  text_layer_destroy( day_layer );
-  text_layer_destroy( date_layer );
-  text_layer_destroy( time_layer );
-  text_layer_destroy( secs_layer );
-  text_layer_destroy( ampm_layer );
-  text_layer_destroy( moonPercent_layer );
-  
-  // Destroy font objects
-  fonts_unload_custom_font( font_date );
-  fonts_unload_custom_font( font_time );
-  fonts_unload_custom_font( font_temp );
-  fonts_unload_custom_font( font_cond );
-  fonts_unload_custom_font( font_times );
-  fonts_unload_custom_font( font_moon );
-
   // Destroy window
   window_destroy( window );
 }

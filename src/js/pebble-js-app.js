@@ -6,19 +6,18 @@ function getWeatherFromLatLong(latitude, longitude) {
   req.onload = function(e) {
     if (req.readyState == 4) {
       if (req.status == 200) {
-        // console.log(req.responseText);
         response = JSON.parse(req.responseText);
-        if (response) {
-          Pebble.sendAppMessage({
-            "temp":response.0 + "\u00B0F",
-            "icon":response.1,
-            "bar":response.2,
-            "updated":response.3,
-            "cond":response.4
+        //Pebble.showSimpleNotificationOnPebble("JSON", response);
+        if (response && response.list && response.list.length > 0) {
+            var weatherResult = response.list[0];
+            Pebble.sendAppMessage({
+            "temp":weatherResult.temp,
+            "icon":weatherResult.icon,
+            "bar":weatherResult.bar,
+            "updated":weatherResult.now,
+            "cond":weatherResult.image
           });
         }
-      } else {
-        console.log("Error");
       }
     }
   }
@@ -38,7 +37,6 @@ function locationSuccess(pos) {
 }
 
 function locationError(err) {
-  console.warn('location error (' + err.code + '): ' + err.message);
   Pebble.sendAppMessage({
     "temp":err.code,
     "icon":"13",
@@ -47,20 +45,10 @@ function locationError(err) {
     "cond":err.message
   });
 }
-
 Pebble.addEventListener("ready", function(e) {
-  console.log("connect!" + e.ready);
-    Pebble.sendAppMessage({
-    "temp":"here",
-    "icon":"yes",
-    "bar":"what",
-    "updated":"ok",
-    "cond":e.ready
-  });
   updateWeather();
   setInterval(function() {
-    console.log("timer fired");
     updateWeather();
   }, 900000);
-  console.log(e.type);
+    //Pebble.showSimpleNotificationOnPebble("ready", "sesame");
 });
