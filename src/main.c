@@ -1,7 +1,21 @@
 #include <pebble.h>
+#include "mini-printf.h"
 #include "config.h"
+#include "pbl-math.h"
+#include "sunmoon.h"
+#include "util.h"
 
 #define ConstantGRect(x, y, w, h) {{(x), (y)}, {(w), (h)}}
+#define VIBHOUR //Vibrate at the top of the hour
+#define FG_COLOR GColorWhite
+
+enum WeatherKey {
+  TEMP_KEY = 0x0,
+  IMAGE_KEY = 0x1,
+  BAR_KEY = 0x2,
+  TIME_KEY = 0x3,
+  COND_KEY = 0x4
+};
  
 static Window *window;
 static GBitmap     *background_image;
@@ -32,6 +46,8 @@ static GFont *font_cond;
 static GFont *font_times;
 static GFont *font_moon;
 
+static AppSync sync;
+static uint8_t sync_buffer[64];
 // Define layer rectangles (x, y, width, height)
 GRect TEMP_RECT  = ConstantGRect(5, 0, 75, 26);
 GRect BAR_RECT  = ConstantGRect(44, 0, 100, 26);
@@ -39,11 +55,11 @@ GRect UPDATED_RECT  = ConstantGRect(2, 53, 75, 20);
 GRect COND_RECT  = ConstantGRect(44, 53, 99, 20);
 GRect SRISE_RECT  = ConstantGRect(5, 145, 75, 20);
 GRect SSET_RECT  = ConstantGRect(39, 145, 100, 20);
-GRect DAY_RECT    = ConstantGRect(5, 115, 144, 33);
+GRect DAY_RECT    = ConstantGRect(5, 117, 144, 33);
 GRect TIME_RECT  = ConstantGRect(5, 66, 114, 60);
 GRect SECS_RECT  = ConstantGRect(119, 70, 144-116, 28);
 GRect AMPM_RECT  = ConstantGRect(116, 89, 144-116, 28);
-GRect DATE_RECT  = ConstantGRect(1, 115, 144-1, 168-118);
+GRect DATE_RECT  = ConstantGRect(1, 117, 144-1, 168-118);
 GRect MOON_RECT    = ConstantGRect(0, 142, 144, 168-142);
 GRect ERR_RECT    = ConstantGRect(0, 35, 144, 26);
 GRect BATT_RECT  = ConstantGRect( 123,  94,  17,   9 );
@@ -51,7 +67,10 @@ GRect BT_RECT    = ConstantGRect(   4,  94,  17,   9 );
 
 // Define placeholders for time and date
 static char time_text[] = "00:00";
+static char seconds_text[] = "00";
 static char ampm_text[] = "AM";
+static char date_text[] = "Xxxxxxxxx 00";
+static char day_text[] = "Xxxxxxxxx";
 
 // Work around to handle initial display for minutes to work when testing units_changed
 static bool first_cycle = true;
@@ -61,12 +80,91 @@ static bool first_cycle = true;
 */
 static TextLayer * setup_text_layer( GRect rect, GTextAlignment align , GFont font ) {
   TextLayer *newLayer = text_layer_create( rect );
-  text_layer_set_text_color( newLayer, GColorWhite );
+  text_layer_set_text_color( newLayer, FG_COLOR );
   text_layer_set_background_color( newLayer, GColorClear );
   text_layer_set_text_alignment( newLayer, align );
   text_layer_set_font( newLayer, font );
 
   return newLayer;
+}
+/*Convert decimal hours, into hours and minutes with rounding*/
+int hours(float time)
+{
+    return (int)(time+1/60.0*0.5);
+}
+
+int mins(float time)
+{
+    int m = (int)((time-(int)time)*60.0+0.5);
+	return (m==60)?0:m;
+}
+
+//return julian day number for time
+int tm2jd(struct tm *time)
+{
+    int y,m;
+    y = time->tm_year + 1900;
+    m = time->tm_mon + 1;
+    return time->tm_mday-32075+1461*(y+4800+(m-14)/12)/4+367*(m-2-(m-14)/12*12)/12-3*((y+4900+(m-14)/12)/100)/4;
+}
+
+float moon_phase(int jdn)
+{
+    double jd;
+    jd = jdn-2451550.1;
+    jd /= 29.530588853;
+    jd -= (int)jd;
+    return jd;
+}
+
+//If 12 hour time, subtract 12 from hr if hr > 12
+char* thr(float time, char ap)
+{
+    static char fmttime[] = "00:00A";
+    int h = hours(time);
+    int m = mins(time);
+    if (clock_is_24h_style()) {
+        mini_snprintf(fmttime, sizeof(fmttime), "%d:%02d",h,m);
+    } else {
+        if (h > 11) {
+            if (h > 12) h -= 12;
+            mini_snprintf(fmttime, sizeof(fmttime), (ap==1)?"%d:%02dP":"%d:%02d",h,m);
+        } else {
+			if (h == 0) h=12;
+            mini_snprintf(fmttime, sizeof(fmttime), (ap==1)?"%d:%02dA":"%d:%02d",h,m);
+        }
+    }
+    return fmttime;
+}
+char* mthr(float time1, float time2, char* inject)
+{
+    static char fmttime[] = "00:00A> 00:00A";
+    int h1 = hours(time1);
+    int m1 = mins(time1);
+    int h2 = hours(time2);
+    int m2 = mins(time2);
+    if (clock_is_24h_style()) {
+        mini_snprintf(fmttime, sizeof(fmttime), "%d:%02d%s %d:%02d",h1,m1,inject,h2,m2);
+	} else {
+        if (h1 > 11 && h2 > 11) {
+            if (h1 > 12) h1 -= 12;
+            if (h2 > 12) h2 -= 12;
+            mini_snprintf(fmttime, sizeof(fmttime), "%d:%02dP%s %d:%02dP",h1,m1,inject,h2,m2);
+        } else if (h1 > 11) {
+			if (h1 > 12) h1 -= 12;
+			if (h2 == 0) h2=12;
+            mini_snprintf(fmttime, sizeof(fmttime), "%d:%02dP%s %d:%02dA",h1,m1,inject,h2,m2);
+        } else if (h2 > 11) {
+			if (h2 > 12) h2 -= 12;
+			if (h1 == 0) h1=12;
+            mini_snprintf(fmttime, sizeof(fmttime), "%d:%02dA%s %d:%02dP",h1,m1,inject,h2,m2);
+        } else {
+			if (h1 == 0) h1=12;
+			if (h2 == 0) h2=12;
+            mini_snprintf(fmttime, sizeof(fmttime), "%d:%02dA%s %d:%02dA",h1,m1,inject,h2,m2);
+        }
+    }
+    return fmttime;
 }
 /*
   Handle bluetooth events
@@ -125,6 +223,87 @@ void handle_battery( BatteryChargeState charge_state ) {
 }
 */
 
+static void sync_tuple_changed_callback(const uint32_t key,
+                                        const Tuple* new_tuple,
+                                        const Tuple* old_tuple,
+                                        void* context) {
+
+  // App Sync keeps new_tuple in sync_buffer, so we may use it directly
+  switch (key) {
+    case IMAGE_KEY:
+      if (icon_image) {
+        gbitmap_destroy(icon_image);
+      }
+      text_layer_set_text(error_layer, new_tuple->value->cstring);
+      //icon_image = gbitmap_create_with_resource(
+      //    WEATHER_ICONS[new_tuple->value->uint8]);
+      //bitmap_layer_set_bitmap(icon_layer, icon_image);
+      break;
+
+    case TEMP_KEY:
+      text_layer_set_text(temp_layer, new_tuple->value->cstring);
+      break;
+
+    case BAR_KEY:
+      text_layer_set_text(bar_layer, new_tuple->value->cstring);
+      break;
+
+    case TIME_KEY:
+      text_layer_set_text(updated_layer, new_tuple->value->cstring);
+      break;
+
+    case COND_KEY:
+      text_layer_set_text(conditions_layer, new_tuple->value->cstring);
+      break;
+  }
+  
+}
+
+// Handle sunmoon stuffs
+static void handle_sunmoon(struct tm *time)
+{
+
+    static char riseText[] = "00:00";
+    static char setText[] = "00:00";
+    static char moon[] = "m";
+    static char moonp[] = "-----";
+    float moonphase_number = 0.0;
+    int moonphase_letter = 0;
+    float sunrise, sunset;//, moonrise[3], moonset[3];
+    
+
+    moonphase_number = moon_phase(tm2jd(time));
+    moonphase_letter = (int)(moonphase_number*27 + 0.5);
+    // correct for southern hemisphere
+    if ((moonphase_letter > 0) && (LAT < 0))
+        moonphase_letter = 28 - moonphase_letter;
+    // select correct font char
+    if (moonphase_letter == 14) {
+        moon[0] = (unsigned char)(48);
+    } else if (moonphase_letter == 0) {
+        moon[0] = (unsigned char)(49);
+    } else if (moonphase_letter < 14) {
+        moon[0] = (unsigned char)(moonphase_letter+96);
+    } else {
+        moon[0] = (unsigned char)(moonphase_letter+95);
+    }
+    text_layer_set_text(moonPercent_layer, moon);
+    if (moonphase_number >= 0.5) {
+        mini_snprintf(moonp,sizeof(moonp)," %d-",(int)((1-(1+pbl_cos(moonphase_number*M_PI*2))/2)*100));
+    } else {
+        mini_snprintf(moonp,sizeof(moonp)," %d+",(int)((1-(1+pbl_cos(moonphase_number*M_PI*2))/2)*100));
+    }
+    //text_layer_set_text(&moonPercent, moonp);
+
+    //sun rise set
+    sunmooncalc(tm2jd(time), TZ, LAT, -LON, 1, &sunrise, &sunset);
+    (sunrise == 99.0) ? mini_snprintf(riseText,sizeof(riseText),"--:--") : mini_snprintf(riseText,sizeof(riseText),"%s",thr(sunrise,0));
+    (sunset == 99.0) ? mini_snprintf(setText,sizeof(setText),"--:--") : mini_snprintf(setText,sizeof(setText),"%s",thr(sunset,0));
+
+    text_layer_set_text(sunrise_layer, riseText);
+    text_layer_set_text(sunset_layer, setText);
+}
+
 /*
   Handle tick events
 */
@@ -132,8 +311,12 @@ void handle_tick( struct tm *tick_time, TimeUnits units_changed ) {
   // Handle day change
   if ( ( ( units_changed & DAY_UNIT ) == DAY_UNIT ) || first_cycle ) {
     // Update text layer for current day
-    
-
+    strftime( day_text, sizeof( day_text ), "%A", tick_time );
+    text_layer_set_text( day_layer, day_text );
+    strftime( date_text, sizeof( date_text ), "%b %e", tick_time );
+    text_layer_set_text( date_layer, date_text );
+    //add in handle day stuff for sunrise, sunset, and moon
+    handle_sunmoon(tick_time);
   }
 
   // Handle time (hour and minute) change
@@ -153,6 +336,20 @@ void handle_tick( struct tm *tick_time, TimeUnits units_changed ) {
     text_layer_set_text( ampm_layer, ampm_text );
   }
 
+  // Handle time second change
+  if ( ( ( units_changed & SECOND_UNIT ) == SECOND_UNIT ) || first_cycle ) {
+    // Display seconds
+    strftime( seconds_text, sizeof( seconds_text ), "%S", tick_time );
+    text_layer_set_text( secs_layer, seconds_text );
+  }
+
+  // on the top of the hour
+  if (((units_changed & HOUR_UNIT) == HOUR_UNIT ) || first_cycle) {
+#ifdef VIBHOUR
+      // vibrate once
+      vibes_short_pulse();
+#endif
+   }
   // Clear
   if ( first_cycle ) {
     first_cycle = false;
@@ -196,27 +393,27 @@ void handle_init( void ) {
   layer_add_child( window_layer, text_layer_get_layer( temp_layer ) );
 
   // Setup conditions layer
-  conditions_layer = setup_text_layer( COND_RECT, GTextAlignmentCenter, font_cond );
+  conditions_layer = setup_text_layer( COND_RECT, GTextAlignmentRight, font_cond );
   layer_add_child( window_layer, text_layer_get_layer( conditions_layer ) );
 	
   // Setup updated layer
-  updated_layer = setup_text_layer( UPDATED_RECT, GTextAlignmentCenter, font_cond );
+  updated_layer = setup_text_layer( UPDATED_RECT, GTextAlignmentLeft, font_cond );
   layer_add_child( window_layer, text_layer_get_layer( updated_layer ) );
 
   // Setup barometric pressure layer
-  bar_layer = setup_text_layer( BAR_RECT, GTextAlignmentCenter, font_cond );
+  bar_layer = setup_text_layer( BAR_RECT, GTextAlignmentRight, font_cond );
   layer_add_child( window_layer, text_layer_get_layer( bar_layer ) );
 
   // Setup sunrise layer
-  sunrise_layer = setup_text_layer( SRISE_RECT, GTextAlignmentCenter, font_cond );
+  sunrise_layer = setup_text_layer( SRISE_RECT, GTextAlignmentLeft, font_cond );
   layer_add_child( window_layer, text_layer_get_layer( sunrise_layer ) );
 
   // Setup sunset layer
-  sunset_layer = setup_text_layer( SSET_RECT, GTextAlignmentCenter, font_cond );
+  sunset_layer = setup_text_layer( SSET_RECT, GTextAlignmentRight, font_cond );
   layer_add_child( window_layer, text_layer_get_layer( sunset_layer ) );
 	
   // Setup day layer
-  day_layer = setup_text_layer( DAY_RECT, GTextAlignmentCenter, font_date );
+  day_layer = setup_text_layer( DAY_RECT, GTextAlignmentLeft, font_date );
   layer_add_child( window_layer, text_layer_get_layer( day_layer ) );
 
   // Setup seconds layer
@@ -224,7 +421,7 @@ void handle_init( void ) {
   layer_add_child( window_layer, text_layer_get_layer( secs_layer ) );
 
   // Setup date layer
-  date_layer = setup_text_layer( DATE_RECT, GTextAlignmentCenter, font_date );
+  date_layer = setup_text_layer( DATE_RECT, GTextAlignmentRight, font_date );
   layer_add_child( window_layer, text_layer_get_layer( date_layer ) );
 
   // Setup moon layer
@@ -235,9 +432,6 @@ void handle_init( void ) {
   error_layer = setup_text_layer( ERR_RECT, GTextAlignmentCenter, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD) );
   layer_add_child( window_layer, text_layer_get_layer( error_layer ) );
 
-  // Subscribe to services
-  tick_timer_service_subscribe( SECOND_UNIT, handle_tick );
-
   // Force update for battery and bluetooth status
   //handle_battery( battery_state_service_peek() );
   //handle_bluetooth( bluetooth_connection_service_peek() );
@@ -245,10 +439,31 @@ void handle_init( void ) {
   //battery_state_service_subscribe( &handle_battery );
   //bluetooth_connection_service_subscribe( &handle_bluetooth );
 
+  // Setup messaging
+  const int inbound_size = 64;
+  const int outbound_size = 64;
+  app_message_open(inbound_size, outbound_size);
+
+  Tuplet initial_values[] = {
+    TupletCString(TEMP_KEY, "0"),
+    TupletCString(IMAGE_KEY, "13"),
+    TupletCString(BAR_KEY, "0"),
+    TupletCString(TIME_KEY, "00:00"),
+    TupletCString(COND_KEY, "?")
+  };
+
+  app_sync_init(&sync, sync_buffer, sizeof(sync_buffer), initial_values,
+                ARRAY_LENGTH(initial_values), sync_tuple_changed_callback,
+                NULL, NULL);
+  text_layer_set_text(error_layer, "Done init");
+
+  // Subscribe to services
+  tick_timer_service_subscribe( SECOND_UNIT, handle_tick );
   // Avoids a blank screen on watch start.
   time_t now = time(NULL);
   struct tm *tick_time = localtime(&now);
   handle_tick( tick_time, SECOND_UNIT );
+  text_layer_set_text(error_layer, "Did tick");
 }
 
 /*
@@ -267,8 +482,8 @@ void destroy_graphics( GBitmap *image, BitmapLayer *layer ) {
   dealloc
 */
 void handle_deinit( void ) {
-  // Subscribe from services
-  //tick_timer_service_unsubscribe();
+  // Unsubscribe from services
+  tick_timer_service_unsubscribe();
   //battery_state_service_unsubscribe();
 
   // Destroy image objects
