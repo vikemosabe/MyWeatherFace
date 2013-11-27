@@ -47,7 +47,7 @@ static GFont *font_times;
 static GFont *font_moon;
 
 static AppSync sync;
-static uint8_t sync_buffer[64];
+static uint8_t sync_buffer[124];
 // Define layer rectangles (x, y, width, height)
 GRect TEMP_RECT  = ConstantGRect(5, 0, 75, 26);
 GRect BAR_RECT  = ConstantGRect(44, 0, 100, 26);
@@ -223,7 +223,7 @@ void handle_battery( BatteryChargeState charge_state ) {
 }
 */
 
-static void sync_tuple_changed_callback(const uint32_t key,
+void sync_tuple_changed_callback(const uint32_t key,
                                         const Tuple* new_tuple,
                                         const Tuple* old_tuple,
                                         void* context) {
@@ -235,6 +235,7 @@ static void sync_tuple_changed_callback(const uint32_t key,
         gbitmap_destroy(icon_image);
       }
       text_layer_set_text(error_layer, new_tuple->value->cstring);
+      layer_mark_dirty(text_layer_get_layer(error_layer));
       //icon_image = gbitmap_create_with_resource(
       //    WEATHER_ICONS[new_tuple->value->uint8]);
       //bitmap_layer_set_bitmap(icon_layer, icon_image);
@@ -242,21 +243,24 @@ static void sync_tuple_changed_callback(const uint32_t key,
 
     case TEMP_KEY:
       text_layer_set_text(temp_layer, new_tuple->value->cstring);
+      layer_mark_dirty(text_layer_get_layer(bar_layer));
       break;
 
     case BAR_KEY:
       text_layer_set_text(bar_layer, new_tuple->value->cstring);
+      layer_mark_dirty(text_layer_get_layer(bar_layer));
       break;
 
     case TIME_KEY:
       text_layer_set_text(updated_layer, new_tuple->value->cstring);
+      layer_mark_dirty(text_layer_get_layer(updated_layer));
       break;
 
     case COND_KEY:
       text_layer_set_text(conditions_layer, new_tuple->value->cstring);
+      layer_mark_dirty(text_layer_get_layer(conditions_layer));
       break;
   }
-  
 }
 
 // Handle sunmoon stuffs
@@ -440,7 +444,7 @@ void handle_init( void ) {
   //bluetooth_connection_service_subscribe( &handle_bluetooth );
 
   // Setup messaging
-  const int inbound_size = 64;
+  const int inbound_size = 124;
   const int outbound_size = 64;
   app_message_open(inbound_size, outbound_size);
 
@@ -455,7 +459,6 @@ void handle_init( void ) {
   app_sync_init(&sync, sync_buffer, sizeof(sync_buffer), initial_values,
                 ARRAY_LENGTH(initial_values), sync_tuple_changed_callback,
                 NULL, NULL);
-  text_layer_set_text(error_layer, "Done init");
 
   // Subscribe to services
   tick_timer_service_subscribe( SECOND_UNIT, handle_tick );
@@ -463,7 +466,6 @@ void handle_init( void ) {
   time_t now = time(NULL);
   struct tm *tick_time = localtime(&now);
   handle_tick( tick_time, SECOND_UNIT );
-  text_layer_set_text(error_layer, "Did tick");
 }
 
 /*
