@@ -50,6 +50,13 @@ function locationError(err) {
 
 Pebble.addEventListener("ready", function(e) {
   console.log("connect!" + e.ready);
+    Pebble.sendAppMessage({
+    "temp":"here",
+    "icon":"yes",
+    "bar":"what",
+    "updated":"ok",
+    "cond":e.ready
+  });
   updateWeather();
   setInterval(function() {
     console.log("timer fired");

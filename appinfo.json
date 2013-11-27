@@ -2,12 +2,12 @@
     "versionLabel": "1.0",
     "uuid": "14f8aa06-5cd6-4df4-9b90-3fc43d683fe1",
     "appKeys": {
-        "cond": 4,
-        "updated": 3,
-        "bar": 2,
-        "temp": 0,
-        "icon": 1
-    },
+		"temp":0,
+		"icon":1,
+		"bar":2,
+		"updated":3,
+		"cond":4
+	},
     "longName": "MyWeatherFace",
     "versionCode": 1,
     "capabilities": [
